@@ -200,7 +200,7 @@ class PagarmeFinanceSummaryService
                 ];
             });
         } catch (PagarmeFinanceUnauthorized $e) {
-            $error = $e->getMessage().' Peça ao admin uma chave com acesso a Saldo e Recebedores.';
+            $error = $e->getMessage().' Atualize a chave financeira em Integrações → Gateways → Pagar.me (escopos Financeiro e Recebedores).';
         } catch (PagarmeFinanceException $e) {
             $error = $e->getMessage();
         }

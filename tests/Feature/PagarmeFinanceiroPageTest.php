@@ -11,7 +11,8 @@ use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 /**
- * /financeiro em modo Pagar.me: visão por produtor (recebíveis do tenant) + bloco da conta compartilhada (só leitura).
+ * /financeiro em modo Pagar.me: visão por produtor (recebíveis do tenant) + bloco da conta compartilhada
+ * (ações só para dono ou equipe com financeiro.manage).
  */
 class PagarmeFinanceiroPageTest extends TestCase
 {
@@ -88,7 +89,8 @@ class PagarmeFinanceiroPageTest extends TestCase
                 ->where('account.balance.available_cents', 150000)
                 ->where('account.bank_account.account_last4', '6543')
                 ->where('account.outside_getfy.waiting_cents', 29000)
-                ->where('account.can_act', false)
+                ->where('account.can_act', true)
+                ->where('write_enabled', false)
             );
     }
 
@@ -127,7 +129,7 @@ class PagarmeFinanceiroPageTest extends TestCase
 
         $this->actingAs($team)->get('/financeiro')
             ->assertOk()
-            ->assertInertia(fn ($page) => $page->component('Financeiro/Pagarme')->where('can_manage', false));
+            ->assertInertia(fn ($page) => $page->component('Financeiro/Pagarme')->where('can_manage', false)->where('account.can_act', false));
     }
 
     public function test_tenant_without_pagarme_account_keeps_the_wallet_page(): void

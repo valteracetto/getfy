@@ -13,7 +13,7 @@ import {
 
 const props = defineProps({
     account: { type: Object, required: true },
-    // Admin: base das ações (/admin/financeiro/pagarme/{id}). Vazio = só leitura.
+    // Base das ações (/financeiro/pagarme) para quem pode gerenciar. Vazio = só leitura.
     actionsBaseUrl: { type: String, default: '' },
     writeEnabled: { type: Boolean, default: false },
     sharedTenantsCount: { type: Number, default: 1 },
@@ -209,7 +209,7 @@ const panelClass = 'rounded-2xl border border-zinc-200/80 bg-white p-4 shadow-sm
             class="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900 dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-100"
         >
             Conta Pagar.me <strong>compartilhada</strong> por {{ sharedTenantsCount }} produtores: saldo, transferências e antecipações são da conta inteira.
-            <span v-if="!canAct">Transferir e antecipar é feito pelo administrador.</span>
+            <span v-if="!canAct">Transferir e antecipar fica com quem gerencia o financeiro.</span>
         </div>
 
         <div v-if="account.error" class="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-900/40 dark:bg-amber-950/25 dark:text-amber-100" role="alert">

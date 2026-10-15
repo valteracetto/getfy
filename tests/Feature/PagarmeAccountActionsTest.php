@@ -13,20 +13,21 @@ use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 /**
- * Ações de dinheiro na conta Pagar.me: só admin, atrás de flag, com senha, valor validado no servidor
- * contra o saldo/limite lido na hora, idempotência e destino sempre a conta bancária cadastrada na Pagar.me.
+ * Ações de dinheiro na conta Pagar.me do próprio produtor (/financeiro): dono ou equipe com financeiro.manage,
+ * atrás de flag, com senha, valor validado no servidor contra o saldo/limite lido na hora, idempotência e destino
+ * sempre a conta bancária cadastrada na Pagar.me. A conta vem do tenant do usuário, nunca da URL.
  */
 class PagarmeAccountActionsTest extends TestCase
 {
     private PagarmeAccount $account;
 
-    private User $admin;
+    private User $producer;
 
     protected function setUp(): void
     {
         parent::setUp();
         config(['getfy.pagarme_finance_write' => true]);
-        $this->admin = User::factory()->create(['role' => User::ROLE_ADMIN, 'tenant_id' => 1, 'password' => 'admin-pass-123']);
+        $this->producer = User::factory()->create(['role' => User::ROLE_INFOPRODUTOR, 'tenant_id' => 10, 'password' => 'p-654321']);
         $this->account = PagarmeAccount::create([
             'label' => 'Conta principal', 'recipient_id' => 're_test_main', 'finance_secret_key' => 'sk_test_finance_secret',
         ]);
@@ -35,7 +36,7 @@ class PagarmeAccountActionsTest extends TestCase
 
     private function url(string $suffix = ''): string
     {
-        return '/admin/financeiro/pagarme/'.$this->account->id.$suffix;
+        return '/financeiro/pagarme'.$suffix;
     }
 
     private function fakeApi(int $availableCents = 50000, array $limits = ['maximum' => ['amount' => 30000], 'minimum' => ['amount' => 1000]]): void
@@ -64,8 +65,8 @@ class PagarmeAccountActionsTest extends TestCase
 
     private function transfer(array $overrides = [], ?User $as = null)
     {
-        return $this->actingAs($as ?? $this->admin)->postJson($this->url('/transfers'), array_merge([
-            'amount_cents' => 10000, 'idempotency_key' => 'k-0001-abcdef', 'current_password' => 'admin-pass-123',
+        return $this->actingAs($as ?? $this->producer)->postJson($this->url('/transfers'), array_merge([
+            'amount_cents' => 10000, 'idempotency_key' => 'k-0001-abcdef', 'current_password' => 'p-654321',
         ], $overrides));
     }
 
@@ -79,18 +80,43 @@ class PagarmeAccountActionsTest extends TestCase
         return $d->toDateString();
     }
 
-    public function test_producer_and_team_cannot_move_money(): void
+    public function test_view_only_team_other_tenants_and_students_cannot_move_money(): void
     {
         $this->fakeApi();
-        $producer = User::factory()->create(['role' => User::ROLE_INFOPRODUTOR, 'tenant_id' => 10, 'password' => 'p-123456']);
-        $role = TeamRole::create(['tenant_id' => 10, 'name' => 'Fin', 'permissions' => ['financeiro.view' => true, 'financeiro.manage' => true]]);
-        $team = User::factory()->create(['role' => User::ROLE_TEAM, 'tenant_id' => 10, 'team_role_id' => $role->id, 'password' => 'p-123456']);
+        $viewer = TeamRole::create(['tenant_id' => 10, 'name' => 'Fin leitura', 'permissions' => ['financeiro.view' => true]]);
+        $team = User::factory()->create(['role' => User::ROLE_TEAM, 'tenant_id' => 10, 'team_role_id' => $viewer->id, 'password' => 'p-123456']);
+        $otherProducer = User::factory()->create(['role' => User::ROLE_INFOPRODUTOR, 'tenant_id' => 12, 'password' => 'p-123456']);
+        $student = User::factory()->create(['role' => User::ROLE_ALUNO, 'tenant_id' => 10, 'password' => 'p-123456']);
 
-        $this->transfer(['current_password' => 'p-123456'], $producer)->assertForbidden();
         $this->transfer(['current_password' => 'p-123456'], $team)->assertForbidden();
-        $this->actingAs($producer)->get('/admin/financeiro/pagarme')->assertForbidden();
+        $this->actingAs($team)->postJson($this->url('/sync'))->assertForbidden();
+        $this->transfer(['current_password' => 'p-123456'], $otherProducer)->assertNotFound();
+        $this->actingAs($otherProducer)->postJson($this->url('/sync'))->assertNotFound();
+        $this->assertContains($this->transfer(['current_password' => 'p-123456'], $student)->status(), [302, 403]);
 
         $this->assertSame([], $this->transferPosts());
+    }
+
+    public function test_team_member_with_manage_permission_can_transfer(): void
+    {
+        $this->fakeApi();
+        $manager = TeamRole::create(['tenant_id' => 10, 'name' => 'Fin', 'permissions' => ['financeiro.view' => true, 'financeiro.manage' => true]]);
+        $team = User::factory()->create(['role' => User::ROLE_TEAM, 'tenant_id' => 10, 'team_role_id' => $manager->id, 'password' => 'p-123456']);
+
+        $this->transfer(['current_password' => 'p-123456'], $team)->assertOk();
+
+        $this->assertCount(1, $this->transferPosts());
+        $this->assertSame($team->id, (int) PagarmeTransfer::sole()->requested_by_user_id);
+    }
+
+    public function test_producer_sharing_the_account_acts_on_the_same_account(): void
+    {
+        $this->fakeApi();
+        $sibling = User::factory()->create(['role' => User::ROLE_INFOPRODUTOR, 'tenant_id' => 11, 'password' => 'p-123456']);
+
+        $this->transfer(['current_password' => 'p-123456'], $sibling)->assertOk();
+
+        $this->assertSame($this->account->id, (int) PagarmeTransfer::sole()->pagarme_account_id);
     }
 
     public function test_write_actions_return_404_when_flag_is_off(): void
@@ -138,7 +164,7 @@ class PagarmeAccountActionsTest extends TestCase
 
         $row = PagarmeTransfer::sole();
         $this->assertSame('777', $row->transfer_id);
-        $this->assertSame($this->admin->id, (int) $row->requested_by_user_id);
+        $this->assertSame($this->producer->id, (int) $row->requested_by_user_id);
         $this->assertSame('pending_transfer', $row->status);
     }
 
@@ -146,18 +172,18 @@ class PagarmeAccountActionsTest extends TestCase
     {
         $this->fakeApi();
         $date = $this->nextBusinessDay();
-        $base = ['timeframe' => 'start', 'payment_date' => $date, 'idempotency_key' => 'a-0001-abcdef', 'current_password' => 'admin-pass-123'];
+        $base = ['timeframe' => 'start', 'payment_date' => $date, 'idempotency_key' => 'a-0001-abcdef', 'current_password' => 'p-654321'];
 
-        $this->actingAs($this->admin)->postJson($this->url('/anticipations'), $base + ['requested_amount_cents' => 30001])
+        $this->actingAs($this->producer)->postJson($this->url('/anticipations'), $base + ['requested_amount_cents' => 30001])
             ->assertStatus(422)->assertJsonValidationErrors('requested_amount_cents');
-        $this->actingAs($this->admin)->postJson($this->url('/anticipations'), $base + ['requested_amount_cents' => 500])
+        $this->actingAs($this->producer)->postJson($this->url('/anticipations'), $base + ['requested_amount_cents' => 500])
             ->assertStatus(422)->assertJsonValidationErrors('requested_amount_cents');
         $saturday = Carbon::now()->next(Carbon::SATURDAY)->toDateString();
-        $this->actingAs($this->admin)->postJson($this->url('/anticipations'), array_merge($base, ['payment_date' => $saturday, 'requested_amount_cents' => 20000]))
+        $this->actingAs($this->producer)->postJson($this->url('/anticipations'), array_merge($base, ['payment_date' => $saturday, 'requested_amount_cents' => 20000]))
             ->assertStatus(422)->assertJsonValidationErrors('payment_date');
         $this->assertSame([], $this->anticipationPosts());
 
-        $this->actingAs($this->admin)->postJson($this->url('/anticipations'), $base + ['requested_amount_cents' => 20000])->assertOk();
+        $this->actingAs($this->producer)->postJson($this->url('/anticipations'), $base + ['requested_amount_cents' => 20000])->assertOk();
         $this->assertCount(1, $this->anticipationPosts());
         $this->assertSame('ba_test_1', PagarmeAnticipation::sole()->anticipation_id);
     }
@@ -166,7 +192,7 @@ class PagarmeAccountActionsTest extends TestCase
     {
         $this->fakeApi();
 
-        $this->actingAs($this->admin)->postJson($this->url('/anticipations/simulate'), [
+        $this->actingAs($this->producer)->postJson($this->url('/anticipations/simulate'), [
             'timeframe' => 'start', 'payment_date' => $this->nextBusinessDay(), 'requested_amount_cents' => 20000,
         ])->assertOk()->assertJson(['amount_cents' => 20000, 'total_fee_cents' => 500]);
 
@@ -180,11 +206,11 @@ class PagarmeAccountActionsTest extends TestCase
         $approved = PagarmeAnticipation::create(['pagarme_account_id' => $this->account->id, 'anticipation_id' => 'ba_test_2', 'requested_amount_cents' => 100, 'status' => 'approved']);
         $other = PagarmeAccount::create(['label' => 'Outra', 'recipient_id' => 're_test_other', 'finance_secret_key' => 'sk_x']);
         $foreign = PagarmeAnticipation::create(['pagarme_account_id' => $other->id, 'anticipation_id' => 'ba_test_3', 'requested_amount_cents' => 100, 'status' => 'pending']);
-        $pw = ['current_password' => 'admin-pass-123'];
+        $pw = ['current_password' => 'p-654321'];
 
-        $this->actingAs($this->admin)->postJson($this->url('/anticipations/'.$foreign->id.'/cancel'), $pw)->assertNotFound();
-        $this->actingAs($this->admin)->postJson($this->url('/anticipations/'.$approved->id.'/cancel'), $pw)->assertStatus(422);
-        $this->actingAs($this->admin)->postJson($this->url('/anticipations/'.$pending->id.'/cancel'), $pw)->assertOk();
+        $this->actingAs($this->producer)->postJson($this->url('/anticipations/'.$foreign->id.'/cancel'), $pw)->assertNotFound();
+        $this->actingAs($this->producer)->postJson($this->url('/anticipations/'.$approved->id.'/cancel'), $pw)->assertStatus(422);
+        $this->actingAs($this->producer)->postJson($this->url('/anticipations/'.$pending->id.'/cancel'), $pw)->assertOk();
 
         $this->assertSame('canceled', $pending->fresh()->status);
     }
@@ -192,13 +218,13 @@ class PagarmeAccountActionsTest extends TestCase
     public function test_transfer_settings_are_validated(): void
     {
         $this->fakeApi();
-        $pw = ['current_password' => 'admin-pass-123'];
+        $pw = ['current_password' => 'p-654321'];
 
-        $this->actingAs($this->admin)->patchJson($this->url('/transfer-settings'), $pw + ['transfer_enabled' => true, 'transfer_interval' => 'weekly', 'transfer_day' => 7])
+        $this->actingAs($this->producer)->patchJson($this->url('/transfer-settings'), $pw + ['transfer_enabled' => true, 'transfer_interval' => 'weekly', 'transfer_day' => 7])
             ->assertStatus(422);
-        $this->actingAs($this->admin)->patchJson($this->url('/transfer-settings'), $pw + ['transfer_enabled' => true, 'transfer_interval' => 'yearly', 'transfer_day' => 1])
+        $this->actingAs($this->producer)->patchJson($this->url('/transfer-settings'), $pw + ['transfer_enabled' => true, 'transfer_interval' => 'yearly', 'transfer_day' => 1])
             ->assertStatus(422);
-        $this->actingAs($this->admin)->patchJson($this->url('/transfer-settings'), $pw + ['transfer_enabled' => true, 'transfer_interval' => 'monthly', 'transfer_day' => 10])
+        $this->actingAs($this->producer)->patchJson($this->url('/transfer-settings'), $pw + ['transfer_enabled' => true, 'transfer_interval' => 'monthly', 'transfer_day' => 10])
             ->assertOk();
 
         Http::assertSent(fn (Request $r) => $r->method() === 'PATCH' && $r['transfer_interval'] === 'monthly' && $r['transfer_day'] === 10);

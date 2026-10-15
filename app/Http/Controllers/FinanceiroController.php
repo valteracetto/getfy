@@ -97,14 +97,15 @@ class FinanceiroController extends Controller
     }
 
     /**
-     * Financeiro com a Pagar.me: números do produtor (recebíveis do tenant) e a conta compartilhada só para leitura.
-     * Transferência e antecipação ficam no admin (Admin\PagarmeAccountController).
+     * Financeiro com a Pagar.me: números do tenant (recebíveis dele) e a conta, que pode ser compartilhada por
+     * vários tenants. Transferir/antecipar: dono ou equipe com financeiro.manage (FinanceiroPagarmeController).
      */
     private function pagarmeIndex(Request $request, PagarmeAccount $account): Response
     {
         $user = $request->user();
         $tenantId = (int) $user->tenant_id;
         $summary = app(PagarmeFinanceSummaryService::class);
+        $canManage = $user->isAdmin() || $user->isInfoprodutor() || app(TeamAccessService::class)->can($user, 'financeiro.manage');
 
         $to = $this->dateOrNull($request->query('period_to'))?->endOfDay() ?? now()->endOfDay();
         $from = $this->dateOrNull($request->query('period_from'))?->startOfDay() ?? $to->copy()->subDays(29)->startOfDay();
@@ -125,10 +126,10 @@ class FinanceiroController extends Controller
             'schedule' => $summary->schedule($tenantId),
             'payables' => $summary->payables($tenantId, $filters),
             'filters' => $filters,
-            'account' => $summary->account($account, false),
+            'account' => $summary->account($account, $canManage),
             'shared_tenants_count' => count($account->tenantIds()),
-            'can_manage' => $user->isAdmin() || $user->isInfoprodutor() || app(TeamAccessService::class)->can($user, 'financeiro.manage'),
-            'is_admin' => $user->isAdmin(),
+            'can_manage' => $canManage,
+            'write_enabled' => (bool) config('getfy.pagarme_finance_write'),
             'plugin_financeiro_tabs' => PluginExtensionRegistry::getFinanceiroTabs(),
         ]);
     }

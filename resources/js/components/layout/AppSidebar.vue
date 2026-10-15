@@ -113,7 +113,6 @@ const navItems = computed(() => {
     }
     if (isAdmin.value) {
         groupFerramentas.push({ name: 'Usuários e equipe', href: '/usuarios', icon: Users });
-        groupFerramentas.push({ name: 'Conta Pagar.me', href: '/admin/financeiro/pagarme', icon: Wallet });
     } else if (role === 'infoprodutor' || canView('equipe.manage')) {
         groupFerramentas.push({ name: 'Usuários e equipe', href: '/usuarios/equipe', icon: Users });
     }

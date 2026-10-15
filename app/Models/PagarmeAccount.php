@@ -79,6 +79,28 @@ class PagarmeAccount extends Model
         });
     }
 
+    /**
+     * Liga um tenant à conta (um tenant fica em uma conta só).
+     */
+    public function addTenant(int $tenantId): void
+    {
+        DB::table('pagarme_account_tenant')->updateOrInsert(
+            ['tenant_id' => $tenantId],
+            ['pagarme_account_id' => $this->id, 'created_at' => now(), 'updated_at' => now()],
+        );
+    }
+
+    /**
+     * Desliga o tenant; a conta sem nenhum tenant é removida (com o espelho local).
+     */
+    public function detachTenant(int $tenantId): void
+    {
+        DB::table('pagarme_account_tenant')->where('pagarme_account_id', $this->id)->where('tenant_id', $tenantId)->delete();
+        if ($this->tenantIds() === []) {
+            $this->delete();
+        }
+    }
+
     public function client(): PagarmeFinanceClient
     {
         return new PagarmeFinanceClient((string) $this->finance_secret_key, (string) $this->recipient_id);

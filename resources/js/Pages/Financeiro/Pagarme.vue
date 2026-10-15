@@ -19,7 +19,7 @@ const props = defineProps({
     account: { type: Object, required: true },
     shared_tenants_count: { type: Number, default: 1 },
     can_manage: { type: Boolean, default: false },
-    is_admin: { type: Boolean, default: false },
+    write_enabled: { type: Boolean, default: false },
     plugin_financeiro_tabs: { type: Array, default: () => [] },
 });
 
@@ -54,11 +54,10 @@ const tabClass = (id) =>
                 </p>
             </div>
             <a
-                v-if="is_admin"
-                :href="`/admin/financeiro/pagarme/${account.id}`"
+                href="/integracoes?tab=gateways&gateway=pagarme"
                 class="rounded-lg border border-zinc-200 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
             >
-                Gerenciar conta
+                Chave da Pagar.me
             </a>
         </div>
 
@@ -107,6 +106,8 @@ const tabClass = (id) =>
         <PagarmeAccountPanel
             v-show="activeTab === 'conta'"
             :account="account"
+            :actions-base-url="can_manage ? '/financeiro/pagarme' : ''"
+            :write-enabled="write_enabled"
             :shared-tenants-count="shared_tenants_count"
         />
 
