@@ -6,22 +6,27 @@ use App\Gateways\Pagarme\PagarmeFinanceClient;
 use App\Gateways\Pagarme\PagarmeFinanceException;
 use App\Http\Controllers\Controller;
 use App\Models\PagarmeAccount;
+use App\Models\PagarmeAnticipation;
 use App\Models\User;
+use App\Services\PagarmeAccountActionsService;
 use App\Services\PagarmeFinanceSummaryService;
 use App\Services\PagarmeFinanceSync;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
 /**
- * Admin: contas Pagar.me (chave financeira + recebedor + tenants). Rotas com role:admin.
+ * Admin: contas Pagar.me (chave financeira + recebedor + tenants) e ações de dinheiro da conta.
+ * Rotas com role:admin; ações de escrita também exigem GETFY_PAGARME_FINANCE_WRITE e a senha do admin.
  */
 class PagarmeAccountController extends Controller
 {
     public function __construct(
+        private readonly PagarmeAccountActionsService $actions,
         private readonly PagarmeFinanceSummaryService $summary,
     ) {}
 
@@ -46,6 +51,7 @@ class PagarmeAccountController extends Controller
                 'last_sync_error' => $a->last_sync_error,
             ]),
             'tenants' => $producers,
+            'write_enabled' => (bool) config('getfy.pagarme_finance_write'),
         ]);
     }
 
@@ -107,6 +113,7 @@ class PagarmeAccountController extends Controller
         return Inertia::render('Financeiro/PagarmeAccountAdmin', [
             'account' => $this->summary->account($account, true, (bool) $request->boolean('fresh')),
             'tenant_ids' => $account->tenantIds(),
+            'write_enabled' => (bool) config('getfy.pagarme_finance_write'),
         ]);
     }
 
@@ -115,6 +122,94 @@ class PagarmeAccountController extends Controller
         $stats = $sync->syncAccount($account);
 
         return response()->json(['stats' => $stats, 'error' => $account->fresh()->last_sync_error]);
+    }
+
+    public function transfer(Request $request, PagarmeAccount $account): JsonResponse
+    {
+        $data = $request->validate([
+            'amount_cents' => ['required', 'integer', 'min:100', 'max:2147483647'],
+            'idempotency_key' => ['required', 'string', 'regex:/^[A-Za-z0-9-]{8,64}$/'],
+            'current_password' => ['required', 'current_password'],
+        ]);
+
+        $result = $this->actions->transfer($account, $request->user(), (int) $data['amount_cents'], $data['idempotency_key'], $request->ip());
+
+        return response()->json([
+            'replayed' => $result['replayed'],
+            'transfer' => [
+                'id' => $result['transfer']->id,
+                'status' => $result['transfer']->status,
+                'amount_cents' => $result['transfer']->amount_cents,
+                'fee_cents' => $result['transfer']->fee_cents,
+            ],
+        ]);
+    }
+
+    public function anticipationLimits(Request $request, PagarmeAccount $account): JsonResponse
+    {
+        $data = $request->validate([
+            'timeframe' => ['required', Rule::in(['start', 'end'])],
+            'payment_date' => ['required', 'date_format:Y-m-d'],
+        ]);
+
+        return response()->json($this->actions->limits($account, $data['timeframe'], $data['payment_date']));
+    }
+
+    public function simulateAnticipation(Request $request, PagarmeAccount $account): JsonResponse
+    {
+        $data = $request->validate([
+            'timeframe' => ['required', Rule::in(['start', 'end'])],
+            'payment_date' => ['required', 'date_format:Y-m-d'],
+            'requested_amount_cents' => ['required', 'integer', 'min:100'],
+        ]);
+
+        return response()->json($this->actions->simulate($account, $data['timeframe'], $data['payment_date'], (int) $data['requested_amount_cents']));
+    }
+
+    public function anticipate(Request $request, PagarmeAccount $account): JsonResponse
+    {
+        $data = $request->validate([
+            'timeframe' => ['required', Rule::in(['start', 'end'])],
+            'payment_date' => ['required', 'date_format:Y-m-d'],
+            'requested_amount_cents' => ['required', 'integer', 'min:100'],
+            'idempotency_key' => ['required', 'string', 'regex:/^[A-Za-z0-9-]{8,64}$/'],
+            'current_password' => ['required', 'current_password'],
+        ]);
+
+        $result = $this->actions->anticipate(
+            $account, $request->user(), $data['timeframe'], $data['payment_date'],
+            (int) $data['requested_amount_cents'], $data['idempotency_key'], $request->ip(),
+        );
+
+        return response()->json([
+            'replayed' => $result['replayed'],
+            'anticipation' => ['id' => $result['anticipation']->id, 'status' => $result['anticipation']->status],
+        ]);
+    }
+
+    public function cancelAnticipation(Request $request, PagarmeAccount $account, PagarmeAnticipation $anticipation): JsonResponse
+    {
+        $request->validate(['current_password' => ['required', 'current_password']]);
+
+        $updated = $this->actions->cancelAnticipation($account, $request->user(), $anticipation, $request->ip());
+
+        return response()->json(['anticipation' => ['id' => $updated->id, 'status' => $updated->status]]);
+    }
+
+    public function updateTransferSettings(Request $request, PagarmeAccount $account): JsonResponse
+    {
+        $data = $request->validate([
+            'transfer_enabled' => ['required', 'boolean'],
+            'transfer_interval' => ['required', Rule::in(['daily', 'weekly', 'monthly'])],
+            'transfer_day' => ['required', 'integer', 'min:0', 'max:31'],
+            'current_password' => ['required', 'current_password'],
+        ]);
+
+        $this->actions->updateTransferSettings(
+            $account, $request->user(), (bool) $data['transfer_enabled'], $data['transfer_interval'], (int) $data['transfer_day'], $request->ip(),
+        );
+
+        return response()->json(['success' => true]);
     }
 
     /**

@@ -7,6 +7,7 @@ import {
     scheduleBars,
     bankAccountLabel,
     transferSettingsLabel,
+    centsFromInput,
 } from '../../resources/js/lib/pagarmeFinance.js';
 
 const nbsp = (s) => s.replace(/ /g, ' ');
@@ -69,5 +70,17 @@ describe('transferSettingsLabel', () => {
         assert.equal(transferSettingsLabel({ transfer_enabled: true, transfer_interval: 'weekly', transfer_day: 1 }), 'Automática: semanal (segunda-feira)');
         assert.equal(transferSettingsLabel({ transfer_enabled: true, transfer_interval: 'monthly', transfer_day: 15 }), 'Automática: mensal (dia 15)');
         assert.equal(transferSettingsLabel(null), 'Configuração de transferência indisponível');
+    });
+});
+
+describe('centsFromInput', () => {
+    it('parses BRL input into integer cents', () => {
+        assert.equal(centsFromInput('1.234,56'), 123456);
+        assert.equal(centsFromInput('10'), 1000);
+        assert.equal(centsFromInput('10,5'), 1050);
+        assert.equal(centsFromInput('10.50'), 1050);
+        assert.equal(centsFromInput(''), null);
+        assert.equal(centsFromInput('abc'), null);
+        assert.equal(centsFromInput('-5'), null);
     });
 });

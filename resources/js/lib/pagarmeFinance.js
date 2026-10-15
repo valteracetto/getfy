@@ -96,3 +96,21 @@ export function transferSettingsLabel(settings) {
             return 'Transferência automática ligada';
     }
 }
+
+// "1.234,56" | "10,5" | "10.50" | "10" → centavos inteiros; inválido ou negativo → null.
+export function centsFromInput(raw) {
+    let s = String(raw ?? '').trim().replace(/^R\$\s*/, '');
+    if (s === '' || !/^[\d.,]+$/.test(s)) {
+        return null;
+    }
+    if (s.includes(',')) {
+        s = s.replace(/\./g, '').replace(',', '.');
+    } else if (!/\.\d{1,2}$/.test(s)) {
+        s = s.replace(/\./g, '');
+    }
+    const value = Number(s);
+    if (!Number.isFinite(value) || value < 0) {
+        return null;
+    }
+    return Math.round(value * 100);
+}

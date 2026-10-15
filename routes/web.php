@@ -293,7 +293,8 @@ Route::middleware(['auth', 'role:admin'])->prefix('usuarios')->name('usuarios.')
     Route::delete('/{user}', [\App\Http\Controllers\UsersController::class, 'destroy'])->name('destroy');
 });
 
-// Financeiro Pagar.me: conta (chave financeira, recebedor, tenants). Só admin.
+// Financeiro Pagar.me: conta (chave financeira, recebedor, tenants) e ações de dinheiro. Só admin;
+// escrita também exige GETFY_PAGARME_FINANCE_WRITE (pagarme.finance.write) e senha do admin.
 Route::middleware(['auth', 'role:admin', 'audit.log'])
     ->prefix('admin/financeiro/pagarme')
     ->name('admin.pagarme.')
@@ -305,6 +306,14 @@ Route::middleware(['auth', 'role:admin', 'audit.log'])
         Route::put('/{account}', [$c, 'update'])->middleware('throttle:10,1')->name('update');
         Route::delete('/{account}', [$c, 'destroy'])->name('destroy');
         Route::post('/{account}/sync', [$c, 'sync'])->middleware('throttle:6,1')->name('sync');
+        Route::middleware(['pagarme.finance.write', 'throttle:20,1'])->group(function () use ($c) {
+            Route::post('/{account}/transfers', [$c, 'transfer'])->name('transfers');
+            Route::get('/{account}/anticipations/limits', [$c, 'anticipationLimits'])->name('anticipations.limits');
+            Route::post('/{account}/anticipations/simulate', [$c, 'simulateAnticipation'])->name('anticipations.simulate');
+            Route::post('/{account}/anticipations', [$c, 'anticipate'])->name('anticipations.store');
+            Route::post('/{account}/anticipations/{anticipation}/cancel', [$c, 'cancelAnticipation'])->name('anticipations.cancel');
+            Route::patch('/{account}/transfer-settings', [$c, 'updateTransferSettings'])->name('transfer-settings');
+        });
     });
 
 // Equipe: cargos e membros (admin e infoprodutor; equipe apenas se tiver permissão)

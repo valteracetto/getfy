@@ -201,6 +201,22 @@ class PagarmeFinanceClient
     }
 
     /**
+     * Transfere do saldo disponível para a conta bancária cadastrada na Pagar.me. Nunca envia dados bancários:
+     * o destino é sempre o da conta.
+     *
+     * @return array<string, mixed>
+     */
+    public function createTransfer(int $amountCents, string $idempotencyKey, array $metadata = []): array
+    {
+        $body = ['amount' => $amountCents, 'recipient_id' => $this->recipientId];
+        if ($metadata !== []) {
+            $body['metadata'] = $metadata;
+        }
+
+        return $this->send('POST', '/transfers', $body, ['Idempotency-Key' => $idempotencyKey]);
+    }
+
+    /**
      * @return list<array<string, mixed>>
      */
     public function anticipations(): array
@@ -208,5 +224,59 @@ class PagarmeFinanceClient
         $json = $this->send('GET', $this->recipientPath('/bulk_anticipations'), ['size' => 100]);
 
         return array_values(array_filter(array_is_list($json) ? $json : ($json['data'] ?? []), 'is_array'));
+    }
+
+    /**
+     * @return array{max_cents: int, min_cents: int|null}
+     */
+    public function anticipationLimits(string $timeframe, string $paymentDate): array
+    {
+        $json = $this->send('GET', $this->recipientPath('/bulk_anticipations/limits'), [
+            'timeframe' => $timeframe, 'payment_date' => $paymentDate,
+        ]);
+
+        return [
+            'max_cents' => (int) ($json['maximum']['amount'] ?? 0),
+            'min_cents' => isset($json['minimum']['amount']) ? (int) $json['minimum']['amount'] : null,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function simulateAnticipation(string $timeframe, string $paymentDate, int $requestedCents): array
+    {
+        return $this->send('POST', $this->recipientPath('/bulk_anticipations/simulate'), [
+            'timeframe' => $timeframe, 'payment_date' => $paymentDate, 'requested_amount' => $requestedCents,
+        ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function createAnticipation(string $timeframe, string $paymentDate, int $requestedCents, string $idempotencyKey): array
+    {
+        return $this->send('POST', $this->recipientPath('/bulk_anticipations'), [
+            'timeframe' => $timeframe, 'payment_date' => $paymentDate, 'requested_amount' => $requestedCents,
+            'automatic_transfer' => false,
+        ], ['Idempotency-Key' => $idempotencyKey]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function cancelAnticipation(string $anticipationId): array
+    {
+        return $this->send('POST', $this->recipientPath('/bulk_anticipations/'.rawurlencode($anticipationId).'/cancel'));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function updateTransferSettings(bool $enabled, string $interval, int $day): array
+    {
+        return $this->send('PATCH', $this->recipientPath('/transfer-settings'), [
+            'transfer_enabled' => $enabled, 'transfer_interval' => $interval, 'transfer_day' => $day,
+        ]);
     }
 }

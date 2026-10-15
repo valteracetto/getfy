@@ -9,6 +9,7 @@ defineOptions({ layout: LayoutInfoprodutor });
 const props = defineProps({
     account: { type: Object, required: true },
     tenant_ids: { type: Array, default: () => [] },
+    write_enabled: { type: Boolean, default: false },
 });
 
 const page = usePage();
@@ -79,6 +80,7 @@ const inputClass = 'mt-1 block w-full rounded-lg border border-zinc-200 bg-white
         <PagarmeAccountPanel
             :account="account"
             :actions-base-url="`/admin/financeiro/pagarme/${account.id}`"
+            :write-enabled="write_enabled"
             :shared-tenants-count="tenant_ids.length"
         />
     </div>

@@ -4,11 +4,12 @@ namespace Tests\Feature;
 
 use App\Gateways\Pagarme\PagarmeFinanceClient;
 use App\Gateways\Pagarme\PagarmeFinanceUnauthorized;
+use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 /**
- * Cliente da API financeira da Pagar.me (v5): saldo e recebíveis (cursor).
+ * Cliente da API financeira da Pagar.me (v5): saldo, recebíveis (cursor), transferências e antecipações.
  * A chave financeira é separada da chave transacional do checkout e nunca aparece em mensagens de erro.
  */
 class PagarmeFinanceClientTest extends TestCase
@@ -61,5 +62,23 @@ class PagarmeFinanceClientTest extends TestCase
 
         $this->assertSame(12345, $balance['available_cents']);
         $this->assertSame(500, $balance['waiting_funds_cents']);
+    }
+
+    public function test_create_transfer_sends_idempotency_key_and_only_amount_and_recipient(): void
+    {
+        Http::fake(['api.pagar.me/core/v5/transfers' => Http::response([
+            'id' => 65485, 'amount' => 1000, 'type' => 'ted', 'status' => 'pending_transfer', 'fee' => 300,
+        ])]);
+
+        $transfer = $this->client()->createTransfer(1000, 'getfy-transfer-abc');
+
+        $this->assertSame('65485', (string) $transfer['id']);
+        Http::assertSent(function (Request $r) {
+            return $r->method() === 'POST'
+                && $r->hasHeader('Idempotency-Key', 'getfy-transfer-abc')
+                && $r['amount'] === 1000
+                && $r['recipient_id'] === 're_test_main'
+                && ! isset($r['bank_account']);
+        });
     }
 }

@@ -8,6 +8,7 @@ defineOptions({ layout: LayoutInfoprodutor });
 const props = defineProps({
     accounts: { type: Array, default: () => [] },
     tenants: { type: Array, default: () => [] },
+    write_enabled: { type: Boolean, default: false },
 });
 
 const showForm = ref(props.accounts.length === 0);
@@ -34,7 +35,7 @@ const inputClass = 'mt-1 block w-full rounded-lg border border-zinc-200 bg-white
             <div>
                 <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-white">Contas Pagar.me</h1>
                 <p class="mt-1 max-w-2xl text-sm text-zinc-500 dark:text-zinc-400">
-                    Chave financeira (separada da chave do checkout) para ler saldo, recebíveis e taxas reais.
+                    Chave financeira (separada da chave do checkout) para ler saldo, recebíveis e taxas reais, e para transferir e antecipar.
                     Produtores (tenants) na mesma conta compartilham o saldo; os recebíveis são separados por produtor.
                 </p>
             </div>
@@ -62,7 +63,7 @@ const inputClass = 'mt-1 block w-full rounded-lg border border-zinc-200 bg-white
             <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">Nova conta</h2>
             <ol class="list-decimal space-y-1 pl-5 text-xs text-zinc-500">
                 <li>No dashboard da Pagar.me: Configurações → Chaves → Criar chave, escopo <strong>Personalizado</strong>.</li>
-                <li>Dê leitura em Recebedores, Saldo, Recebíveis, Liquidações, Transferências e Antecipações.</li>
+                <li>Dê leitura e escrita em Recebedores, Saldo, Recebíveis, Liquidações, Transferências e Antecipações (só leitura basta se não for transferir/antecipar pelo Getfy).</li>
                 <li>Cole a chave abaixo. Ela fica criptografada e nunca é exibida de novo.</li>
             </ol>
             <label class="block text-xs font-medium text-zinc-500">
@@ -97,5 +98,9 @@ const inputClass = 'mt-1 block w-full rounded-lg border border-zinc-200 bg-white
                 <button v-if="accounts.length" type="button" class="rounded-lg px-4 py-2 text-sm text-zinc-500" @click="showForm = false">Cancelar</button>
             </div>
         </form>
+
+        <p class="text-xs text-zinc-500">
+            Transferir e antecipar: {{ write_enabled ? 'ligado' : 'desligado (GETFY_PAGARME_FINANCE_WRITE)' }}.
+        </p>
     </div>
 </template>
