@@ -293,6 +293,20 @@ Route::middleware(['auth', 'role:admin'])->prefix('usuarios')->name('usuarios.')
     Route::delete('/{user}', [\App\Http\Controllers\UsersController::class, 'destroy'])->name('destroy');
 });
 
+// Financeiro Pagar.me: conta (chave financeira, recebedor, tenants). Só admin.
+Route::middleware(['auth', 'role:admin', 'audit.log'])
+    ->prefix('admin/financeiro/pagarme')
+    ->name('admin.pagarme.')
+    ->group(function () {
+        $c = \App\Http\Controllers\Admin\PagarmeAccountController::class;
+        Route::get('/', [$c, 'index'])->name('index');
+        Route::post('/', [$c, 'store'])->middleware('throttle:10,1')->name('store');
+        Route::get('/{account}', [$c, 'show'])->name('show');
+        Route::put('/{account}', [$c, 'update'])->middleware('throttle:10,1')->name('update');
+        Route::delete('/{account}', [$c, 'destroy'])->name('destroy');
+        Route::post('/{account}/sync', [$c, 'sync'])->middleware('throttle:6,1')->name('sync');
+    });
+
 // Equipe: cargos e membros (admin e infoprodutor; equipe apenas se tiver permissão)
 Route::middleware(['auth', 'admin.tenant', 'role:admin|infoprodutor|team', 'team.permission:equipe.manage'])
     ->prefix('usuarios/equipe')

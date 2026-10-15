@@ -64,6 +64,7 @@ function onReload() {
             <p class="leading-relaxed">
                 Saques e aprovações de parceiros dependem da
                 <strong>CajuPay</strong> configurada. Conecte em Integrações para liberar o painel abaixo.
+                Vende pela <strong>Pagar.me</strong>? Peça ao administrador para cadastrar a conta financeira da Pagar.me.
             </p>
         </div>
 
