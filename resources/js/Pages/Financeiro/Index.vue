@@ -129,6 +129,7 @@ function onReload() {
             pix-base-url="/financeiro/pix"
             :partner-summary="summary"
             :show-commissions-table="false"
+            :can-manage="canManageFinanceiro"
             @reload="onReload"
         />
             </div>
