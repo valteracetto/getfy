@@ -10,19 +10,21 @@
 
 namespace Minishlink\WebPush;
 
+use Base64Url\Base64Url;
 use GuzzleHttp\Client;
+use GuzzleHttp\Pool;
 use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Exception\RequestException;
-use GuzzleHttp\Pool;
 use GuzzleHttp\Psr7\Request;
-use Jose\Component\Core\Util\Base64UrlSafe;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
+use Psr\Log\LoggerInterface;
 
 class WebPush
 {
     protected Client $client;
     protected array $auth;
+    protected ?LoggerInterface $logger;
 
     /**
      * @var null|array Array of array of Notifications
@@ -52,15 +54,23 @@ class WebPush
     /**
      * WebPush constructor.
      *
-     * @param array    $auth           Some servers need authentication
-     * @param array    $defaultOptions TTL, urgency, topic, batchSize, requestConcurrency
-     * @param int|null $timeout        Timeout of POST request
+     * @param array           $auth           Some servers need authentication
+     * @param array           $defaultOptions TTL, urgency, topic, batchSize, requestConcurrency
+     * @param int|null        $timeout        Timeout of POST request
+     * @param LoggerInterface|null $logger    Optional PSR-3 logger; if provided, replaces trigger_error() calls
      *
      * @throws \ErrorException
      */
-    public function __construct(array $auth = [], array $defaultOptions = [], ?int $timeout = 30, array $clientOptions = [])
-    {
-        Utils::checkRequirement();
+    public function __construct(
+        array $auth = [],
+        array $defaultOptions = [],
+        ?int $timeout = 30,
+        array $clientOptions = [],
+        ?LoggerInterface $logger = null
+    ) {
+        $this->logger = $logger;
+
+        Utils::checkRequirement($this->logger);
 
         if (isset($auth['VAPID'])) {
             $auth['VAPID'] = VAPID::validate($auth['VAPID']);
@@ -260,8 +270,8 @@ class WebPush
                 ];
 
                 if ($contentEncoding === ContentEncoding::aesgcm->value) {
-                    $headers['Encryption'] = 'salt='.Base64UrlSafe::encode($salt);
-                    $headers['Crypto-Key'] = 'dh='.Base64UrlSafe::encode($localPublicKey);
+                    $headers['Encryption'] = 'salt='.Base64Url::encode($salt);
+                    $headers['Crypto-Key'] = 'dh='.Base64Url::encode($localPublicKey);
                 }
 
                 $encryptionContentCodingHeader = Encryption::getContentCodingHeader($salt, $localPublicKey, ContentEncoding::from($contentEncoding));

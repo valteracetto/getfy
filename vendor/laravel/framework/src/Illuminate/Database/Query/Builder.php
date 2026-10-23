@@ -2169,6 +2169,10 @@ class Builder implements BuilderContract
             throw new InvalidArgumentException('The number of columns must match the number of values');
         }
 
+        if ($this->invalidOperator($operator)) {
+            throw new InvalidArgumentException('Invalid operator passed to whereRowValues method.');
+        }
+
         $type = 'RowValues';
 
         $this->wheres[] = compact('type', 'columns', 'operator', 'values', 'boolean');
@@ -3014,6 +3018,36 @@ class Builder implements BuilderContract
     public function inRandomOrder($seed = '')
     {
         return $this->orderByRaw($this->grammar->compileRandom($seed));
+    }
+
+    /**
+     * Add an "order by" clause to order results by a given sequence of values.
+     *
+     * @param  \Illuminate\Contracts\Database\Query\Expression|string  $column
+     * @param  \Illuminate\Contracts\Support\Arrayable|array  $values
+     * @return $this
+     */
+    public function inOrderOf($column, $values)
+    {
+        if ($values instanceof Arrayable) {
+            $values = $values->toArray();
+        }
+
+        $values = array_values($values);
+
+        if (empty($values)) {
+            return $this;
+        }
+
+        $this->{$this->unions ? 'unionOrders' : 'orders'}[] = [
+            'type' => 'InOrderOf',
+            'column' => $column,
+            'values' => $values,
+        ];
+
+        $this->addBinding($this->cleanBindings($values), $this->unions ? 'unionOrder' : 'order');
+
+        return $this;
     }
 
     /**

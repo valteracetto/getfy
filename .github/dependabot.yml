@@ -1,0 +1,97 @@
+# Dependabot: avisa e abre PRs para dependências com atualizações/vulnerabilidades.
+# Os alertas de segurança precisam estar ligados em:
+# Settings > Code security > Dependabot alerts / Dependabot security updates.
+#
+# Atenção: a pasta vendor/ é versionada. PRs de Composer atualizam só o composer.lock;
+# antes do merge, rode `composer install` na branch do PR e commite vendor/.
+version: 2
+updates:
+  - package-ecosystem: "composer"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "America/Sao_Paulo"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps(composer)"
+    labels:
+      - "dependencies"
+      - "php"
+    groups:
+      composer-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      # Versões fixadas de propósito no composer.json (SDKs de pagamento).
+      - dependency-name: "mercadopago/dx-php"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "stripe/stripe-php"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "America/Sao_Paulo"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps(npm)"
+    labels:
+      - "dependencies"
+      - "javascript"
+    groups:
+      npm-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # Imagem base PHP do Dockerfile (ex.: correções de segurança do PHP).
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "America/Sao_Paulo"
+    commit-message:
+      prefix: "deps(docker)"
+    labels:
+      - "dependencies"
+      - "docker"
+    ignore:
+      # Manter o PHP na linha 8.2; troca de minor (8.3/8.4) é migração manual.
+      - dependency-name: "php"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+
+  # Imagens do docker-compose (MySQL, Redis, Caddy).
+  - package-ecosystem: "docker-compose"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "America/Sao_Paulo"
+    commit-message:
+      prefix: "deps(compose)"
+    labels:
+      - "dependencies"
+      - "docker"
+    ignore:
+      - dependency-name: "mysql"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "redis"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    commit-message:
+      prefix: "deps(actions)"
+    labels:
+      - "dependencies"

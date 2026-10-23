@@ -1,5 +1,5 @@
 # Estágio 1: compila extensões PHP (toolchain pesada); não vai para a imagem final.
-FROM php:8.2-fpm-alpine AS php_extensions_builder
+FROM php:8.2.35-fpm-alpine AS php_extensions_builder
 
 RUN apk add --no-cache --virtual .build-deps \
     $PHPIZE_DEPS \
@@ -14,7 +14,7 @@ RUN apk add --no-cache --virtual .build-deps \
 
 # Estágio 2: runtime — só nginx/supervisor + libs runtime (sem gcc).
 # COPY do builder ANTES do apk: força o builder a terminar primeiro (evita dois apk em paralelo no BuildKit).
-FROM php:8.2-fpm-alpine AS php_runtime
+FROM php:8.2.35-fpm-alpine AS php_runtime
 
 COPY --from=php_extensions_builder \
     /usr/local/lib/php/extensions/no-debug-non-zts-20220829/ \

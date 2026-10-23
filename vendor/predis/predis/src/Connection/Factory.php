@@ -25,6 +25,11 @@ class Factory implements FactoryInterface
 {
     private $defaults = [];
 
+    /**
+     * @var string|null
+     */
+    private $upstreamDriver;
+
     protected $schemes = [
         'tcp' => 'Predis\Connection\StreamConnection',
         'unix' => 'Predis\Connection\StreamConnection',
@@ -134,6 +139,26 @@ class Factory implements FactoryInterface
     }
 
     /**
+     * Sets upstream driver information for CLIENT SETINFO.
+     *
+     * @param string $driver Upstream driver string (e.g., 'laravel_v11.0.0' or 'laravel_v11.0.0;my-app_v1.0.0').
+     */
+    public function setUpstreamDriver(string $driver): void
+    {
+        $this->upstreamDriver = $driver;
+    }
+
+    /**
+     * Returns the configured upstream driver.
+     *
+     * @return string|null
+     */
+    public function getUpstreamDriver(): ?string
+    {
+        return $this->upstreamDriver;
+    }
+
+    /**
      * Creates a connection parameters instance from the supplied argument.
      *
      * @param mixed $parameters Original connection parameters.
@@ -183,18 +208,30 @@ class Factory implements FactoryInterface
             );
         }
 
-        $connection->addConnectCommand(
-            new RawCommand('CLIENT', ['SETINFO', 'LIB-NAME', 'predis'])
-        );
+        if ($parameters->client_info ?? true) {
+            $connection->addConnectCommand(
+                new RawCommand('CLIENT', ['SETINFO', 'LIB-NAME', $this->buildLibraryName()])
+            );
 
-        $connection->addConnectCommand(
-            new RawCommand('CLIENT', ['SETINFO', 'LIB-VER', Client::VERSION])
-        );
+            $connection->addConnectCommand(
+                new RawCommand('CLIENT', ['SETINFO', 'LIB-VER', Client::VERSION])
+            );
+        }
 
         if (isset($parameters->database) && strlen($parameters->database)) {
             $connection->addConnectCommand(
                 new RawCommand('SELECT', [$parameters->database])
             );
         }
+    }
+
+    /**
+     * Builds the library name string for CLIENT SETINFO.
+     *
+     * @return string
+     */
+    protected function buildLibraryName(): string
+    {
+        return $this->upstreamDriver ? 'predis(' . $this->upstreamDriver . ')' : 'predis';
     }
 }

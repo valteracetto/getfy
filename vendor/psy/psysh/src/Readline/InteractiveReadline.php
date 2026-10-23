@@ -11,6 +11,7 @@
 
 namespace Psy\Readline;
 
+use Psy\CommandAware;
 use Psy\Completion\CompletionEngine;
 use Psy\Exception\ThrowUpException;
 use Psy\Output\Theme;
@@ -18,9 +19,11 @@ use Psy\Readline\Interactive\Helper\DebugLog;
 use Psy\Readline\Interactive\Input\History as InteractiveHistory;
 use Psy\Readline\Interactive\Input\StdinReader;
 use Psy\Readline\Interactive\InteractiveSession;
+use Psy\Readline\Interactive\Pager;
 use Psy\Readline\Interactive\Readline as InternalReadline;
 use Psy\Readline\Interactive\Suggestion\Source\ContextAwareSource;
 use Psy\Readline\Interactive\Terminal;
+use Psy\Readline\Interactive\TerminalOutput;
 use Psy\Shell;
 use Psy\ShellAware;
 use Psy\Util\TerminalColor;
@@ -35,12 +38,13 @@ use Symfony\Component\Console\Output\StreamOutput;
  * A pure-PHP readline with visual feedback, autosuggestions, tab completion,
  * and other interactive features.
  */
-class InteractiveReadline implements InteractiveReadlineInterface, ShellAware
+class InteractiveReadline implements InteractiveReadlineInterface, ShellAware, CommandAware
 {
     private InternalReadline $readline;
     private InteractiveHistory $history;
     private Terminal $terminal;
     private InteractiveSession $session;
+    private ?Pager $pager = null;
     /** @var string|false */
     private $historyFile;
     /** @var string|false */
@@ -101,7 +105,7 @@ class InteractiveReadline implements InteractiveReadlineInterface, ShellAware
 
         DebugLog::enable($output->getVerbosity());
 
-        $this->terminal = $terminal ?? new Terminal(new StdinReader(\STDIN), $output);
+        $this->terminal = $terminal ?? new Terminal(new StdinReader(\STDIN), new TerminalOutput($output));
         $this->session = new InteractiveSession($this->terminal);
         $this->history = new InteractiveHistory($this->historySize, $this->eraseDups);
         $this->resolveHistoryFiles();
@@ -185,6 +189,16 @@ class InteractiveReadline implements InteractiveReadlineInterface, ShellAware
     /**
      * {@inheritdoc}
      */
+    public function listSessionHistory(): array
+    {
+        $this->assertBooted();
+
+        return $this->history->getSessionCommands();
+    }
+
+    /**
+     * {@inheritdoc}
+     */
     public function readHistory(): bool
     {
         $this->assertBooted();
@@ -247,12 +261,34 @@ class InteractiveReadline implements InteractiveReadlineInterface, ShellAware
     }
 
     /**
+     * Get the userland Pager, lazily constructed using this Readline's
+     * Terminal/InputQueue/FrameRenderer and InteractiveSession.
+     *
+     * Available only after setOutput() has been called.
+     */
+    public function getPager(): Pager
+    {
+        $this->assertBooted();
+        if ($this->pager === null) {
+            $this->pager = $this->readline->createPager($this->session);
+        }
+
+        return $this->pager;
+    }
+
+    /**
      * {@inheritdoc}
      */
     public function setShell(Shell $shell): void
     {
         $this->assertBooted();
         $this->readline->setShell($shell);
+    }
+
+    public function setCommands(array $commands): void
+    {
+        $this->assertBooted();
+        $this->readline->getCommandHighlighter()->setCommands($commands);
     }
 
     /**
@@ -296,10 +332,28 @@ class InteractiveReadline implements InteractiveReadlineInterface, ShellAware
     /**
      * {@inheritdoc}
      */
-    public function setBracketedPaste(bool $enabled): void
+    public function setUseSyntaxHighlighting(bool $enabled): void
     {
         $this->assertBooted();
-        $this->session->setBracketedPaste($enabled);
+        $this->readline->setUseSyntaxHighlighting($enabled);
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function setUseBracketedPaste(bool $enabled): void
+    {
+        $this->assertBooted();
+        $this->session->setUseBracketedPaste($enabled);
+    }
+
+    /**
+     * Enable or disable Unicode in PsySH-owned terminal UI.
+     */
+    public function setUseUnicode(bool $enabled): void
+    {
+        $this->assertBooted();
+        $this->terminal->setUseUnicode($enabled);
     }
 
     /**

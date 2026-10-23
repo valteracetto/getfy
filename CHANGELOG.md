@@ -1,5 +1,14 @@
 # Changelog
 
+## [Não lançado]
+
+### Segurança
+
+- **PHP (Docker)**: imagem base fixada em `php:8.2.35-fpm-alpine`, que corrige as falhas críticas de execução remota "PHP2Shell" (CVE-2026-109618 e CVE-2026-109619, out/2026). Instalações Docker precisam rodar `update.sh` para reconstruir a imagem.
+- **Dependências PHP**: `composer update` dentro das versões permitidas, zerando o `composer audit` (Laravel 12.70, Guzzle, Symfony, league/commonmark, web-token/jwt-library, aws-sdk/jmespath, entre outras).
+- **Dependências JS**: `npm audit fix` (vite, postcss, qs, shell-quote, nanoid, source-map-js) — afetam só build/dev, o bundle publicado não muda.
+- **Dependabot**: `.github/dependabot.yml` para Composer, npm, Docker, docker-compose e GitHub Actions, e workflow semanal `Security audit` (`composer audit` + `npm audit`).
+
 ## [2.0.4] - 03-07-2026
 
 ### Novidades

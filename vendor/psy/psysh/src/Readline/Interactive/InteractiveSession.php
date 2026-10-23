@@ -62,6 +62,14 @@ class InteractiveSession
             $this->terminal->disableBracketedPaste();
         }
 
+        if ($this->terminal->isMouseReportingEnabled()) {
+            $this->terminal->disableMouseReporting();
+        }
+
+        if ($this->terminal->isAltScreenEnabled()) {
+            $this->terminal->disableAltScreen();
+        }
+
         $this->terminal->disableRawMode();
         $this->active = false;
     }
@@ -69,7 +77,7 @@ class InteractiveSession
     /**
      * Enable or disable bracketed paste mode for the active session.
      */
-    public function setBracketedPaste(bool $enabled): void
+    public function setUseBracketedPaste(bool $enabled): void
     {
         $this->bracketedPasteEnabled = $enabled;
 

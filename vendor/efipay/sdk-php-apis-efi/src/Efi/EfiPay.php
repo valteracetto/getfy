@@ -17,6 +17,7 @@ namespace Efi;
  * @method mixed definePayMethod(array $params, array $body)
  * @method mixed definePayMethodPartner(array $params, array $body)
  * @method mixed cancelCharge(array $params)
+ * @method mixed createChargeCard(array $params = [], array $body)
  * @method mixed cardPaymentRetry(array $params, array $body)
  * @method mixed refundCard(array $params, array $body)
  * @method mixed createCarnet(array $params = [], array $body)
@@ -105,6 +106,7 @@ namespace Efi;
  * @method mixed pixSplitConfig(array $params = [], array $body)
  * @method mixed pixSplitConfigId(array $params, array $body)
  * @method mixed pixSplitDetailConfig(array $params)
+ * @method mixed pixSplitDevolution(array $params, array $body)
  * @method mixed pixCreateDueChargeBatch(array $params, array $body)
  * @method mixed pixUpdateDueChargeBatch(array $params, array $body)
  * @method mixed pixDetailDueChargeBatch(array $params)
@@ -134,6 +136,7 @@ namespace Efi;
  * @method mixed pixCreateAutomaticCharge($params = [], $body)
  * @method mixed pixListAutomaticCharge($params)
  * @method mixed pixRetryRequestAutomatic($params)
+ * @method mixed createStaticPix(array $params = [])
  * 
  * API OPEN FINANCE
  * @method mixed ofConfigUpdate(array $params = [], array $body)
@@ -211,5 +214,10 @@ class EfiPay extends Endpoints
         } else {
             parent::__construct($options, $requester);
         }
+    }
+    public function createStaticPix(array $params): string
+    {
+        $staticPix = new StaticPix();
+        return $staticPix->create($params);
     }
 }

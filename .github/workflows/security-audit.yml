@@ -1,0 +1,51 @@
+# Auditoria de vulnerabilidades conhecidas (Composer + npm).
+# Roda em PRs/push que mexem em dependências e toda segunda-feira,
+# para pegar CVEs novas mesmo sem mudanças no código.
+name: Security audit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "composer.json"
+      - "composer.lock"
+      - "package.json"
+      - "package-lock.json"
+      - "Dockerfile"
+      - ".github/workflows/security-audit.yml"
+  pull_request:
+    paths:
+      - "composer.json"
+      - "composer.lock"
+      - "package.json"
+      - "package-lock.json"
+      - "Dockerfile"
+      - ".github/workflows/security-audit.yml"
+  schedule:
+    - cron: "17 9 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  composer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.2"
+          tools: composer:v2
+          coverage: none
+      # Pacote abandonado (setasign/fpdi-fpdf) não deve falhar o job.
+      - run: composer audit --locked --abandoned=report
+
+  npm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm audit --package-lock-only --audit-level=high

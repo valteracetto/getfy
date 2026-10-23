@@ -26,6 +26,7 @@ class ShellOutput extends ConsoleOutput
     private int $paging = 0;
     private OutputPager $pager;
     private Theme $theme;
+    private bool $visibleOutputWritten = false;
 
     /**
      * Construct a ShellOutput instance.
@@ -42,15 +43,7 @@ class ShellOutput extends ConsoleOutput
         $this->theme = $theme ?? new Theme('modern');
         $this->initFormatters();
 
-        if ($pager === null) {
-            $this->pager = new PassthruPager($this);
-        } elseif (\is_string($pager)) {
-            $this->pager = new ProcOutputPager($this, $pager);
-        } elseif ($pager instanceof OutputPager) {
-            $this->pager = $pager;
-        } else {
-            throw new \InvalidArgumentException('Unexpected pager parameter: '.$pager);
-        }
+        $this->pager = $this->createPager($pager);
     }
 
     /**
@@ -87,6 +80,15 @@ class ShellOutput extends ConsoleOutput
         }
 
         $this->stopPaging();
+    }
+
+    /**
+     * Set a listener invoked whenever visible output is written.
+     *
+     * @deprecated No longer used. ShellOutput tracks visible writes internally.
+     */
+    public function setWriteListener(?callable $listener): void
+    {
     }
 
     /**
@@ -128,7 +130,9 @@ class ShellOutput extends ConsoleOutput
 
         if ($type & self::NUMBER_LINES) {
             $pad = \strlen((string) \count($messages));
-            $template = $this->isDecorated() ? "<aside>%{$pad}s</aside>: %s" : "%{$pad}s: %s";
+            $template = $this->isDecorated() && $this->getFormatter()->hasStyle('whisper')
+                ? "<whisper>%{$pad}s:</whisper> %s"
+                : "%{$pad}s: %s";
 
             if ($type & self::OUTPUT_RAW) {
                 $messages = \array_map([OutputFormatter::class, 'escape'], $messages);
@@ -172,12 +176,29 @@ class ShellOutput extends ConsoleOutput
      */
     public function doWrite($message, $newline): void
     {
-        // @todo Update OutputPager interface to require doWrite
-        if ($this->paging > 0 && ($this->pager instanceof ProcOutputPager || $this->pager instanceof PassthruPager)) {
-            $this->pager->doWrite($message, $newline);
+        $this->visibleOutputWritten = true;
+
+        if ($this->paging > 0) {
+            // @todo Update OutputPager interface to require doWrite
+            if ($this->pager instanceof ProcOutputPager || $this->pager instanceof PassthruPager || $this->pager instanceof BuiltinOutputPager) {
+                $this->pager->doWrite($message, $newline);
+            } else {
+                $this->pager->write($message, $newline, self::OUTPUT_RAW);
+            }
         } else {
             parent::doWrite($message, $newline);
         }
+    }
+
+    /**
+     * Reset visible output tracking and return whether output was written.
+     */
+    public function consumeVisibleOutputWritten(): bool
+    {
+        $written = $this->visibleOutputWritten;
+        $this->visibleOutputWritten = false;
+
+        return $written;
     }
 
     /**
@@ -187,6 +208,18 @@ class ShellOutput extends ConsoleOutput
     {
         $this->theme = $theme;
         $this->initFormatters();
+    }
+
+    /**
+     * Replace the output pager used for future paging operations.
+     *
+     * @param string|OutputPager|null $pager
+     */
+    public function setPager($pager): void
+    {
+        $this->closePager();
+        $this->paging = 0;
+        $this->pager = $this->createPager($pager);
     }
 
     /**
@@ -200,29 +233,35 @@ class ShellOutput extends ConsoleOutput
     }
 
     /**
+     * @param string|OutputPager|null $pager
+     */
+    private function createPager($pager): OutputPager
+    {
+        if ($pager === null) {
+            return new PassthruPager($this);
+        }
+
+        if (\is_string($pager)) {
+            return new ProcOutputPager($this, $pager);
+        }
+
+        if ($pager instanceof OutputPager) {
+            return $pager;
+        }
+
+        throw new \InvalidArgumentException('Unexpected pager parameter: '.$pager);
+    }
+
+    /**
      * Initialize output formatter styles.
      */
     private function initFormatters()
     {
-        $useGrayFallback = !$this->grayExists();
+        $useGrayFallback = !Theme::grayExists($this->getFormatter());
         $this->theme->applyStyles($this->getFormatter(), $useGrayFallback);
         $this->theme->applyErrorStyles($this->getErrorOutput()->getFormatter(), $useGrayFallback);
 
         // Set inline styles for hyperlinks
         LinkFormatter::setStyles($this->theme->getInlineStyles($useGrayFallback));
-    }
-
-    /**
-     * Checks if the "gray" color exists on the output.
-     */
-    private function grayExists(): bool
-    {
-        try {
-            $this->write('<fg=gray></>');
-        } catch (\InvalidArgumentException $e) {
-            return false;
-        }
-
-        return true;
     }
 }
